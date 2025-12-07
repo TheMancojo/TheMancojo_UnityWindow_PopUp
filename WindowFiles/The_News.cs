@@ -20,7 +20,7 @@ public class The_News : EditorWindow
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
-// Hola golfa
+//Hola Golfa
 
     private class Node
     {
@@ -79,15 +79,11 @@ public class The_News : EditorWindow
             
             if (!string.IsNullOrEmpty(currentCommit))
             {
-                // Check if there are code updates and auto-update if found
+                // Check if there are code updates
                 bool hasUpdates = await CheckForCodeUpdates(currentCommit, lastCommit);
-                if (hasUpdates)
-                {
-                    await AutoUpdateCodeFromGitHub();
-                }
                 
                 // Open window if it's the first time (no stored commit) OR if something was updated
-                if (string.IsNullOrEmpty(lastCommit) || currentCommit != lastCommit)
+                if (string.IsNullOrEmpty(lastCommit) || currentCommit != lastCommit || hasUpdates)
                 {
                     ShowWindow();
                 }
@@ -250,40 +246,45 @@ public class The_News : EditorWindow
         }
     }
 
-    private static async System.Threading.Tasks.Task AutoUpdateCodeFromGitHub()
+    private async void UpdateCodeFromGitHub()
     {
         try
         {
             string githubCode = await DownloadGitHubScript();
             if (string.IsNullOrEmpty(githubCode))
             {
-                Debug.LogWarning("Could not download code from GitHub for auto-update.");
+                EditorUtility.DisplayDialog("Update Failed", "Could not download code from GitHub.", "OK");
                 return;
             }
 
-            // Create backup silently
+            // Create backup
             string backupPath = LOCAL_SCRIPT_PATH + ".backup." + System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
             if (System.IO.File.Exists(LOCAL_SCRIPT_PATH))
             {
                 System.IO.File.Copy(LOCAL_SCRIPT_PATH, backupPath);
             }
 
-            // Write new code silently
+            // Write new code
             System.IO.File.WriteAllText(LOCAL_SCRIPT_PATH, githubCode);
             AssetDatabase.Refresh();
 
-            Debug.Log($"The_News.cs auto-updated from GitHub. Backup saved to: {backupPath}");
-            
-            // Auto-recompile
-            EditorApplication.delayCall += () =>
+            hasCodeUpdates = false;
+            Repaint();
+
+            bool recompile = EditorUtility.DisplayDialog(
+                "Code Updated", 
+                $"The_News.cs has been updated from GitHub.\nBackup saved to: {backupPath}\n\nRecompile scripts now?", 
+                "Recompile", "Later");
+
+            if (recompile)
             {
                 AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
                 EditorUtility.RequestScriptReload();
-            };
+            }
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"Auto-update failed: {e.Message}");
+            EditorUtility.DisplayDialog("Update Failed", $"Error updating code: {e.Message}", "OK");
         }
     }
 
@@ -302,6 +303,9 @@ public class The_News : EditorWindow
         githubToken = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
         lastKnownCommit = EditorPrefs.GetString(PREF_LAST_COMMIT_KEY, "");
         if (!isLoading && root.children.Count == 0) Refresh();
+        
+        // Check for code updates
+        CheckForCodeUpdatesAsync();
     }
 
     private void OnGUI()
@@ -315,6 +319,17 @@ public class The_News : EditorWindow
 
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
         if (GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(100))) Refresh();
+        
+        if (hasCodeUpdates)
+        {
+            GUI.backgroundColor = Color.yellow;
+            if (GUILayout.Button("Update Code", EditorStyles.toolbarButton, GUILayout.Width(100)))
+            {
+                UpdateCodeFromGitHub();
+            }
+            GUI.backgroundColor = Color.white;
+        }
+        
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("Token", EditorStyles.toolbarButton, GUILayout.Width(60))) showSettings = !showSettings;
         EditorGUILayout.EndHorizontal();
@@ -1343,4 +1358,3 @@ public class The_News : EditorWindow
     }
 }
 #endif
-
