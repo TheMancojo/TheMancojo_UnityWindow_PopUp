@@ -18,28 +18,9 @@ public class The_News : EditorWindow
     private const string PREF_LAST_COMMIT_KEY = "The_News.LastCommit";
     private const string LOCAL_SCRIPT_PATH = "Assets/TheMancojo/Scripts/The_News/Editor/The_News.cs";
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
+    private const string LOCAL_VERSION_FILE = "Assets/TheMancojo/Scripts/The_News/Data/Version";
+    private const string GITHUB_VERSION_FILE = "WindowFiles/The_News/Data/Version";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
-
-/*Mamma mia, here I go again
-My, my, how can I resist you?
-Mamma mia, does it show again?
-My, my, just how much I've missed you?
-Yes, I've been brokenhearted
-Blue since the day we parted
-Why, why did I ever let you go?
-Mamma mia, even if I say
-Bye-bye, leave me now or never
-Mamma mia, it's a game we play
-Bye-bye doesn't mean forever
-Mamma mia, here I go again
-My, my, how can I resist you?
-Mamma mia, does it show again
-My, my, just how much I've missed you?
-Yes, I've been brokenhearted
-Blue since the day we parted
-Why, why did I ever let you go?
-Mamma mia, now I really know
-My, my, I could never let you go*/
 
     private class Node
     {
@@ -93,22 +74,13 @@ My, my, I could never let you go*/
     {
         try
         {
-            string lastCommit = EditorPrefs.GetString(PREF_LAST_COMMIT_KEY, "");
-            string currentCommit = await GetLatestCommitSHA();
+            // Only check version files, ignore commits
+            bool hasUpdates = await CheckForVersionUpdates();
             
-            if (!string.IsNullOrEmpty(currentCommit))
+            // Open window if there are version updates
+            if (hasUpdates)
             {
-                // Check if there are code updates
-                bool hasUpdates = await CheckForCodeUpdates(currentCommit, lastCommit);
-                
-                // Open window if it's the first time (no stored commit) OR if something was updated
-                if (string.IsNullOrEmpty(lastCommit) || currentCommit != lastCommit || hasUpdates)
-                {
-                    ShowWindow();
-                }
-                
-                // Always update the stored commit
-                EditorPrefs.SetString(PREF_LAST_COMMIT_KEY, currentCommit);
+                ShowWindow();
             }
         }
         catch (System.Exception e)
@@ -118,92 +90,50 @@ My, my, I could never let you go*/
         }
     }
 
-    private static async System.Threading.Tasks.Task<string> GetLatestCommitSHA()
+
+
+    private static async System.Threading.Tasks.Task<bool> CheckForVersionUpdates()
     {
         try
         {
-            using (var client = new HttpClient())
+            Debug.Log("Checking version files for updates...");
+            
+            // Get GitHub version file content
+            var githubVersionData = await GetGitHubVersionData();
+            if (githubVersionData == null)
             {
-                client.Timeout = TimeSpan.FromSeconds(3); // Shorter timeout for better responsiveness
-                
-                // Use same headers as main window
-                var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-                string token = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
-                
-                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-                    client.DefaultRequestHeaders.Add("User-Agent", "Unity-The_News");
-                if (!string.IsNullOrEmpty(token?.Trim()))
-                {
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + token.Trim());
-                }
-                
-                string url = $"https://api.github.com/repos/{REPO}/commits/{BRANCH}";
-                var response = await client.GetAsync(url);
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    string json = await response.Content.ReadAsStringAsync();
-                    // Simple SHA extraction from JSON
-                    var shaMatch = System.Text.RegularExpressions.Regex.Match(json, "\"sha\"\\s*:\\s*\"([^\"]+)\"");
-                    if (shaMatch.Success)
-                    {
-                        return shaMatch.Groups[1].Value;
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"GitHub API returned {response.StatusCode}: {response.ReasonPhrase}");
-                }
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning($"Error getting latest commit SHA: {e.Message}");
-        }
-        return null;
-    }
-
-    private static async System.Threading.Tasks.Task<bool> CheckForCodeUpdates(string currentCommit, string lastCommit)
-    {
-        try
-        {
-            // Always check for updates if commits are different
-            if (string.IsNullOrEmpty(currentCommit))
-                return false;
-
-            // Download GitHub version of the script
-            string githubCode = await DownloadGitHubScript();
-            if (string.IsNullOrEmpty(githubCode))
-            {
-                Debug.LogWarning("Could not download GitHub script for comparison");
+                Debug.LogWarning("Could not read GitHub version file");
                 return false;
             }
-
-            // Read local script
-            string localCode = "";
-            if (System.IO.File.Exists(LOCAL_SCRIPT_PATH))
+            
+            // Get local version file content
+            var localVersionData = GetLocalVersionData();
+            if (localVersionData == null)
             {
-                localCode = System.IO.File.ReadAllText(LOCAL_SCRIPT_PATH);
+                Debug.LogWarning("Could not read local version file");
+                return true; // If no local file, need update
+            }
+            
+            // Always show both version data in console
+            Debug.Log($"VERSION COMPARISON - GitHub: Version={githubVersionData.Value.Version}, Update={githubVersionData.Value.Update} | Local: Version={localVersionData.Value.Version}, Update={localVersionData.Value.Update}");
+            
+            // Compare Version numbers - if different, need code update
+            bool hasCodeUpdates = githubVersionData.Value.Version != localVersionData.Value.Version;
+            
+            if (hasCodeUpdates)
+            {
+                Debug.Log($"CODE UPDATE NEEDED - GitHub Version {githubVersionData.Value.Version} differs from local Version {localVersionData.Value.Version}");
             }
             else
             {
-                Debug.LogWarning($"Local script not found at: {LOCAL_SCRIPT_PATH}");
-                return true; // If local file doesn't exist, we definitely need an update
+                Debug.Log($"NO CODE UPDATE NEEDED - Version numbers match: {githubVersionData.Value.Version}");
             }
-
-            // Simple file size comparison in bits - much more reliable and precise
-            long githubBits = (long)githubCode.Length * 8; // Convert bytes to bits
-            long localBits = (long)localCode.Length * 8; // Convert bytes to bits
             
-            bool hasUpdates = githubBits != localBits;
-            
-            Debug.Log($"File size comparison - GitHub: {githubBits} bits ({githubCode.Length} bytes), Local: {localBits} bits ({localCode.Length} bytes), Updates needed: {hasUpdates}");
-            
-            return hasUpdates;
+            return hasCodeUpdates;
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"Error checking for code updates: {e.Message}");
+            Debug.LogError($"Error checking version files: {e.Message}");
             return false;
         }
     }
@@ -249,17 +179,150 @@ My, my, I could never let you go*/
         return null;
     }
 
-    private static string NormalizeCode(string code)
+    private struct VersionData
     {
-        if (string.IsNullOrEmpty(code))
-            return "";
+        public int Version;
+        public int Update;
+    }
+
+    private static async System.Threading.Tasks.Task<VersionData?> GetGitHubVersionData()
+    {
+        try
+        {
+            using (var client = new HttpClient())
+            {
+                client.Timeout = TimeSpan.FromSeconds(5);
+                
+                // Add authentication headers
+                var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+                string token = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
+                
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "Unity-The_News");
+                if (!string.IsNullOrEmpty(token?.Trim()))
+                {
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + token.Trim());
+                }
+                
+                string url = string.Format(RAW_BASE, REPO, BRANCH) + GITHUB_VERSION_FILE;
+                Debug.Log($"Downloading GitHub version file from: {url}");
+                
+                var response = await client.GetAsync(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Debug.LogError($"Failed to download GitHub version file: {response.StatusCode} - {response.ReasonPhrase}");
+                    return null;
+                }
+                
+                string content = await response.Content.ReadAsStringAsync();
+                Debug.Log($"GitHub version file content: {content}");
+                
+                return ParseVersionData(content);
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error getting GitHub version data: {e.Message}");
+            return null;
+        }
+    }
+
+    private static VersionData? GetLocalVersionData()
+    {
+        try
+        {
+            if (!System.IO.File.Exists(LOCAL_VERSION_FILE))
+            {
+                Debug.Log($"Local version file does not exist: {LOCAL_VERSION_FILE}");
+                return null;
+            }
             
-        // Remove comments, normalize whitespace for comparison
-        return code
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Replace("\t", "    ")
-            .Trim();
+            string content = System.IO.File.ReadAllText(LOCAL_VERSION_FILE);
+            Debug.Log($"Local version file content: {content}");
+            
+            return ParseVersionData(content);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error getting local version data: {e.Message}");
+            return null;
+        }
+    }
+    
+    private static VersionData? ParseVersionData(string content)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                Debug.LogWarning("Version file content is empty");
+                return null;
+            }
+            
+            var lines = content.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            int version = -1;
+            int update = -1;
+            
+            foreach (string line in lines)
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("Version", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Handle format "Version: 0.2" or "Version 0.2"
+                    var colonIndex = trimmed.IndexOf(':');
+                    if (colonIndex > 0 && colonIndex < trimmed.Length - 1)
+                    {
+                        string versionText = trimmed.Substring(colonIndex + 1).Trim();
+                        if (float.TryParse(versionText, out float v))
+                        {
+                            version = (int)(v * 10); // Convert 0.2 to 2, 1.5 to 15, etc.
+                        }
+                    }
+                    else
+                    {
+                        var parts = trimmed.Split(new[] { ' ', '=', ':' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2 && float.TryParse(parts[1], out float v))
+                        {
+                            version = (int)(v * 10);
+                        }
+                    }
+                }
+                else if (trimmed.StartsWith("Update", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Handle format "Update: 2" or "Update 2"
+                    var colonIndex = trimmed.IndexOf(':');
+                    if (colonIndex > 0 && colonIndex < trimmed.Length - 1)
+                    {
+                        string updateText = trimmed.Substring(colonIndex + 1).Trim();
+                        if (int.TryParse(updateText, out int u))
+                        {
+                            update = u;
+                        }
+                    }
+                    else
+                    {
+                        var parts = trimmed.Split(new[] { ' ', '=', ':' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2 && int.TryParse(parts[1], out int u))
+                        {
+                            update = u;
+                        }
+                    }
+                }
+            }
+            
+            if (version == -1 || update == -1)
+            {
+                Debug.LogWarning($"Could not parse version data. Version: {version}, Update: {update}");
+                return null;
+            }
+            
+            return new VersionData { Version = version, Update = update };
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error parsing version data: {e.Message}");
+            return null;
+        }
     }
 
     private async void CheckForCodeUpdatesAsync()
@@ -273,7 +336,7 @@ My, my, I could never let you go*/
             
             // Add timeout for the entire operation
             var timeoutTask = System.Threading.Tasks.Task.Delay(10000); // 10 second timeout
-            var updateTask = PerformUpdateCheck();
+            var updateTask = CheckForVersionUpdates();
             
             var completedTask = await System.Threading.Tasks.Task.WhenAny(updateTask, timeoutTask);
             
@@ -285,6 +348,18 @@ My, my, I could never let you go*/
             
             bool previousHasUpdates = hasCodeUpdates;
             hasCodeUpdates = await updateTask;
+            
+            // Always show version data regardless of result
+            var githubVersionData = await GetGitHubVersionData();
+            var localVersionData = GetLocalVersionData();
+            if (githubVersionData.HasValue && localVersionData.HasValue)
+            {
+                Debug.Log($"VERSION COMPARISON - GitHub: Version={githubVersionData.Value.Version}, Update={githubVersionData.Value.Update} | Local: Version={localVersionData.Value.Version}, Update={localVersionData.Value.Update}");
+            }
+            else
+            {
+                Debug.Log($"VERSION COMPARISON - Could not read version data. GitHub: {(githubVersionData.HasValue ? "OK" : "FAILED")} | Local: {(localVersionData.HasValue ? "OK" : "FAILED")}");
+            }
             
             if (hasCodeUpdates && !previousHasUpdates)
             {
@@ -313,35 +388,27 @@ My, my, I could never let you go*/
             isCheckingForUpdates = false;
         }
     }
-    
-    private async System.Threading.Tasks.Task<bool> PerformUpdateCheck()
-    {
-        try
-        {
-            string currentCommit = await GetLatestCommitSHA();
-            if (string.IsNullOrEmpty(currentCommit))
-            {
-                Debug.LogWarning("Could not get latest commit SHA for update check");
-                return false;
-            }
-            
-            return await CheckForCodeUpdates(currentCommit, lastKnownCommit);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error in PerformUpdateCheck: {e.Message}");
-            return false;
-        }
-    }
+
 
     private async void UpdateCodeFromGitHub()
     {
         try
         {
+            Debug.Log("Starting code update from GitHub...");
+            
+            // Download both script and version data
             string githubCode = await DownloadGitHubScript();
+            var githubVersionData = await GetGitHubVersionData();
+            
             if (string.IsNullOrEmpty(githubCode))
             {
                 EditorUtility.DisplayDialog("Update Failed", "Could not download code from GitHub.", "OK");
+                return;
+            }
+            
+            if (!githubVersionData.HasValue)
+            {
+                EditorUtility.DisplayDialog("Update Failed", "Could not read version data from GitHub.", "OK");
                 return;
             }
 
@@ -350,10 +417,25 @@ My, my, I could never let you go*/
             if (System.IO.File.Exists(LOCAL_SCRIPT_PATH))
             {
                 System.IO.File.Copy(LOCAL_SCRIPT_PATH, backupPath);
+                Debug.Log($"Backup created: {backupPath}");
             }
 
             // Write new code
             System.IO.File.WriteAllText(LOCAL_SCRIPT_PATH, githubCode);
+            Debug.Log("Updated script file");
+            
+            // Update local version file
+            string versionFileDir = System.IO.Path.GetDirectoryName(LOCAL_VERSION_FILE);
+            if (!System.IO.Directory.Exists(versionFileDir))
+            {
+                System.IO.Directory.CreateDirectory(versionFileDir);
+            }
+            
+            // Write new version data to local file
+            string versionContent = $"Version {githubVersionData.Value.Version}\nUpdate {githubVersionData.Value.Update}";
+            System.IO.File.WriteAllText(LOCAL_VERSION_FILE, versionContent);
+            Debug.Log($"Updated local version file with Version {githubVersionData.Value.Version}, Update {githubVersionData.Value.Update}");
+            
             AssetDatabase.Refresh();
 
             hasCodeUpdates = false;
@@ -361,7 +443,7 @@ My, my, I could never let you go*/
 
             bool recompile = EditorUtility.DisplayDialog(
                 "Code Updated", 
-                $"The_News.cs has been updated from GitHub.\nBackup saved to: {backupPath}\n\nRecompile scripts now?", 
+                $"The_News.cs has been updated to Version {githubVersionData.Value.Version}.\nBackup saved to: {backupPath}\n\nRecompile scripts now?", 
                 "Recompile", "Later");
 
             if (recompile)
@@ -373,6 +455,7 @@ My, my, I could never let you go*/
         catch (System.Exception e)
         {
             EditorUtility.DisplayDialog("Update Failed", $"Error updating code: {e.Message}", "OK");
+            Debug.LogError($"Update failed: {e.Message}\n{e.StackTrace}");
         }
     }
 
