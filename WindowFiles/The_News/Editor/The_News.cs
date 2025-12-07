@@ -20,7 +20,6 @@ public class The_News : EditorWindow
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
-//Gex Say aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
     private class Node
     {
@@ -172,13 +171,13 @@ public class The_News : EditorWindow
                 return true; // If local file doesn't exist, we definitely need an update
             }
 
-            // Simple file size comparison - much more reliable
-            int githubSize = githubCode.Length;
-            int localSize = localCode.Length;
+            // Simple file size comparison in bits - much more reliable and precise
+            long githubBits = (long)githubCode.Length * 8; // Convert bytes to bits
+            long localBits = (long)localCode.Length * 8; // Convert bytes to bits
             
-            bool hasUpdates = githubSize != localSize;
+            bool hasUpdates = githubBits != localBits;
             
-            Debug.Log($"File size comparison - GitHub: {githubSize} bytes, Local: {localSize} bytes, Updates needed: {hasUpdates}");
+            Debug.Log($"File size comparison - GitHub: {githubBits} bits ({githubCode.Length} bytes), Local: {localBits} bits ({localCode.Length} bytes), Updates needed: {hasUpdates}");
             
             return hasUpdates;
         }
