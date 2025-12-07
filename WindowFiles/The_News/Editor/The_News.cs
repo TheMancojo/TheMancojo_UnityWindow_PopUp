@@ -140,15 +140,19 @@ public class The_News : EditorWindow
 
     private static async System.Threading.Tasks.Task<bool> CheckForCodeUpdates(string currentCommit, string lastCommit)
     {
-        if (string.IsNullOrEmpty(currentCommit) || currentCommit == lastCommit)
-            return false;
-
         try
         {
+            // Always check for updates if commits are different
+            if (string.IsNullOrEmpty(currentCommit))
+                return false;
+
             // Download GitHub version of the script
             string githubCode = await DownloadGitHubScript();
             if (string.IsNullOrEmpty(githubCode))
+            {
+                Debug.LogWarning("Could not download GitHub script for comparison");
                 return false;
+            }
 
             // Read local script
             string localCode = "";
@@ -156,15 +160,27 @@ public class The_News : EditorWindow
             {
                 localCode = System.IO.File.ReadAllText(LOCAL_SCRIPT_PATH);
             }
+            else
+            {
+                Debug.LogWarning($"Local script not found at: {LOCAL_SCRIPT_PATH}");
+                return true; // If local file doesn't exist, we definitely need an update
+            }
 
             // Compare scripts (ignore whitespace differences)
             string normalizedGithub = NormalizeCode(githubCode);
             string normalizedLocal = NormalizeCode(localCode);
 
-            return normalizedGithub != normalizedLocal;
+            bool hasUpdates = normalizedGithub != normalizedLocal;
+            if (hasUpdates)
+            {
+                Debug.Log($"Code differences detected. GitHub length: {normalizedGithub.Length}, Local length: {normalizedLocal.Length}");
+            }
+            
+            return hasUpdates;
         }
-        catch
+        catch (System.Exception e)
         {
+            Debug.LogWarning($"Error checking for code updates: {e.Message}");
             return false;
         }
     }
@@ -223,24 +239,50 @@ public class The_News : EditorWindow
 
         try
         {
+            Debug.Log("Checking for code updates...");
             string currentCommit = await GetLatestCommitSHA();
             if (!string.IsNullOrEmpty(currentCommit))
             {
+                bool previousHasUpdates = hasCodeUpdates;
                 hasCodeUpdates = await CheckForCodeUpdates(currentCommit, lastKnownCommit);
-                if (hasCodeUpdates)
+                
+                if (hasCodeUpdates && !previousHasUpdates)
                 {
-                    Debug.Log("Code updates available from GitHub");
-                    Repaint();
+                    Debug.Log("Code updates available from GitHub - showing update button");
                 }
+                else if (!hasCodeUpdates && previousHasUpdates)
+                {
+                    Debug.Log("Code is up to date - hiding update button");
+                }
+                
+                // Always repaint to ensure UI updates
+                EditorApplication.delayCall += Repaint;
+            }
+            else
+            {
+                Debug.LogWarning("Could not get latest commit SHA for update check");
             }
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"Failed to check for code updates: {e.Message}");
+            Debug.LogError($"Failed to check for code updates: {e.Message}");
         }
         finally
         {
             isCheckingForUpdates = false;
+            
+            // Schedule next check in 30 seconds
+            EditorApplication.delayCall += () => {
+                if (this != null)
+                {
+                    EditorApplication.delayCall += () => {
+                        System.Threading.Tasks.Task.Delay(30000).ContinueWith(_ => {
+                            if (this != null)
+                                EditorApplication.delayCall += () => CheckForCodeUpdatesAsync();
+                        });
+                    };
+                }
+            };
         }
     }
 
@@ -316,7 +358,15 @@ public class The_News : EditorWindow
         EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), back);
 
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-        if (GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(100))) Refresh();
+        if (GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(100))) {
+            Refresh();
+            CheckForCodeUpdatesAsync(); // Also check for code updates
+        }
+        
+        if (GUILayout.Button("Check Updates", EditorStyles.toolbarButton, GUILayout.Width(100)))
+        {
+            CheckForCodeUpdatesAsync();
+        }
         
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("Token", EditorStyles.toolbarButton, GUILayout.Width(60))) showSettings = !showSettings;
