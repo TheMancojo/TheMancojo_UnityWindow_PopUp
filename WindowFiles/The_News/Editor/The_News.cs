@@ -234,13 +234,31 @@ public class The_News : EditorWindow
             {
                 client.Timeout = TimeSpan.FromSeconds(3);
                 
+                // Add authentication headers like other GitHub API calls
+                var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+                string token = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
+                
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "Unity-The_News");
+                if (!string.IsNullOrEmpty(token?.Trim()))
+                {
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + token.Trim());
+                }
+                
                 string url = string.Format(API_TREE, REPO, BRANCH);
                 Debug.Log($"Getting GitHub tree from: {url}");
                 
-                var response = await client.GetStringAsync(url);
+                var response = await client.GetAsync(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Debug.LogError($"GitHub API returned {response.StatusCode}: {response.ReasonPhrase}");
+                    return null;
+                }
+                
+                string responseContent = await response.Content.ReadAsStringAsync();
                 
                 // Parse JSON to find version files
-                var lines = response.Split('\n');
+                var lines = responseContent.Split('\n');
                 foreach (string line in lines)
                 {
                     if (line.Contains($"\"{GITHUB_VERSION_FOLDER}/Version") && line.Contains("\"blob\""))
