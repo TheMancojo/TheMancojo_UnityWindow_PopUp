@@ -318,16 +318,6 @@ public class The_News : EditorWindow
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
         if (GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(100))) Refresh();
         
-        if (hasCodeUpdates)
-        {
-            GUI.backgroundColor = Color.yellow;
-            if (GUILayout.Button("Update Code", EditorStyles.toolbarButton, GUILayout.Width(100)))
-            {
-                UpdateCodeFromGitHub();
-            }
-            GUI.backgroundColor = Color.white;
-        }
-        
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("Token", EditorStyles.toolbarButton, GUILayout.Width(60))) showSettings = !showSettings;
         EditorGUILayout.EndHorizontal();
@@ -374,12 +364,6 @@ public class The_News : EditorWindow
                 UpdateCodeFromGitHub();
             }
             GUI.backgroundColor = Color.white;
-            
-            if (GUILayout.Button("Skip Update", GUILayout.Height(40), GUILayout.Width(120)))
-            {
-                hasCodeUpdates = false;
-                Repaint();
-            }
             
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
