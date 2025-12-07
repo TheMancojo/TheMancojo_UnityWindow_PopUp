@@ -105,7 +105,7 @@ public class The_News : EditorWindow
         {
             using (var client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(5); // Quick timeout for auto-check
+                client.Timeout = TimeSpan.FromSeconds(3); // Shorter timeout for better responsiveness
                 
                 // Use same headers as main window
                 var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
@@ -131,11 +131,15 @@ public class The_News : EditorWindow
                         return shaMatch.Groups[1].Value;
                     }
                 }
+                else
+                {
+                    Debug.LogWarning($"GitHub API returned {response.StatusCode}: {response.ReasonPhrase}");
+                }
             }
         }
-        catch
+        catch (System.Exception e)
         {
-            // Ignore network errors for auto-check
+            Debug.LogWarning($"Error getting latest commit SHA: {e.Message}");
         }
         return null;
     }
@@ -193,7 +197,7 @@ public class The_News : EditorWindow
         {
             using (var client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(10);
+                client.Timeout = TimeSpan.FromSeconds(5); // Short timeout
                 
                 var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
                 string token = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
@@ -206,17 +210,24 @@ public class The_News : EditorWindow
                 }
                 
                 string url = string.Format(RAW_BASE, REPO, BRANCH) + GITHUB_SCRIPT_PATH;
+                Debug.Log($"Downloading script from: {url}");
                 var response = await client.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    return await response.Content.ReadAsStringAsync();
+                    string content = await response.Content.ReadAsStringAsync();
+                    Debug.Log($"Successfully downloaded script, length: {content?.Length ?? 0}");
+                    return content;
+                }
+                else
+                {
+                    Debug.LogWarning($"Failed to download script: {response.StatusCode} - {response.ReasonPhrase}");
                 }
             }
         }
-        catch
+        catch (System.Exception e)
         {
-            // Ignore errors for code checking
+            Debug.LogWarning($"Error downloading GitHub script: {e.Message}");
         }
         return null;
     }
@@ -242,49 +253,67 @@ public class The_News : EditorWindow
         try
         {
             Debug.Log("Checking for code updates...");
-            string currentCommit = await GetLatestCommitSHA();
-            if (!string.IsNullOrEmpty(currentCommit))
+            
+            // Add timeout for the entire operation
+            var timeoutTask = System.Threading.Tasks.Task.Delay(10000); // 10 second timeout
+            var updateTask = PerformUpdateCheck();
+            
+            var completedTask = await System.Threading.Tasks.Task.WhenAny(updateTask, timeoutTask);
+            
+            if (completedTask == timeoutTask)
             {
-                bool previousHasUpdates = hasCodeUpdates;
-                hasCodeUpdates = await CheckForCodeUpdates(currentCommit, lastKnownCommit);
-                
-                if (hasCodeUpdates && !previousHasUpdates)
-                {
-                    Debug.Log("Code updates available from GitHub - showing update button");
-                }
-                else if (!hasCodeUpdates && previousHasUpdates)
-                {
-                    Debug.Log("Code is up to date - hiding update button");
-                }
-                
-                // Always repaint to ensure UI updates
-                EditorApplication.delayCall += Repaint;
+                Debug.LogWarning("Code update check timed out after 10 seconds");
+                return;
             }
-            else
+            
+            bool previousHasUpdates = hasCodeUpdates;
+            hasCodeUpdates = await updateTask;
+            
+            if (hasCodeUpdates && !previousHasUpdates)
             {
-                Debug.LogWarning("Could not get latest commit SHA for update check");
+                Debug.Log("Code updates available from GitHub - showing update button");
             }
+            else if (!hasCodeUpdates && previousHasUpdates)
+            {
+                Debug.Log("Code is up to date - hiding update button");
+            }
+            else if (!hasCodeUpdates)
+            {
+                Debug.Log("No code updates found");
+            }
+            
+            // Force UI update
+            EditorApplication.delayCall += () => {
+                if (this != null) Repaint();
+            };
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"Failed to check for code updates: {e.Message}");
+            Debug.LogError($"Failed to check for code updates: {e.Message}\n{e.StackTrace}");
         }
         finally
         {
             isCheckingForUpdates = false;
+        }
+    }
+    
+    private async System.Threading.Tasks.Task<bool> PerformUpdateCheck()
+    {
+        try
+        {
+            string currentCommit = await GetLatestCommitSHA();
+            if (string.IsNullOrEmpty(currentCommit))
+            {
+                Debug.LogWarning("Could not get latest commit SHA for update check");
+                return false;
+            }
             
-            // Schedule next check in 30 seconds
-            EditorApplication.delayCall += () => {
-                if (this != null)
-                {
-                    EditorApplication.delayCall += () => {
-                        System.Threading.Tasks.Task.Delay(30000).ContinueWith(_ => {
-                            if (this != null)
-                                EditorApplication.delayCall += () => CheckForCodeUpdatesAsync();
-                        });
-                    };
-                }
-            };
+            return await CheckForCodeUpdates(currentCommit, lastKnownCommit);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error in PerformUpdateCheck: {e.Message}");
+            return false;
         }
     }
 
