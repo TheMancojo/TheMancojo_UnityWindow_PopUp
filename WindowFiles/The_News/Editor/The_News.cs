@@ -743,6 +743,22 @@ public class The_News : EditorWindow
                 }
             }
         }
+        
+        // Hide WindowFiles folder from navigation
+        if (root.children.ContainsKey("WindowFiles"))
+        {
+            var windowFiles = root.children["WindowFiles"];
+            // Move all children of WindowFiles to root level
+            foreach (var child in windowFiles.children)
+            {
+                child.Value.parent = root;
+                child.Value.path = child.Key;
+                root.children[child.Key] = child.Value;
+            }
+            // Remove WindowFiles folder
+            root.children.Remove("WindowFiles");
+        }
+        
         // Second pass: collect Post.N folders as posts and move their content to parent
         CollectPostFolders(root);
         // Third pass: process button files after posts are collected
