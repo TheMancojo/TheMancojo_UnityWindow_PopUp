@@ -20,7 +20,7 @@ public class The_News : EditorWindow
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
-//Gex Say
+//Gex Say aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
     private class Node
     {
