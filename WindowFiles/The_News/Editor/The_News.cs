@@ -148,45 +148,39 @@ public class The_News : EditorWindow
     {
         try
         {
-            // Always check for updates if commits are different
-            if (string.IsNullOrEmpty(currentCommit))
-                return false;
-
-            // Download GitHub version of the script
-            string githubCode = await DownloadGitHubScript();
-            if (string.IsNullOrEmpty(githubCode))
+            Debug.Log("Checking version files for updates...");
+            
+            // Get GitHub version file name
+            string githubVersionFile = await GetGitHubVersionFile();
+            if (string.IsNullOrEmpty(githubVersionFile))
             {
-                Debug.LogWarning("Could not download GitHub script for comparison");
+                Debug.LogWarning("Could not find version file on GitHub");
                 return false;
             }
-
-            // Read local script
-            string localCode = "";
-            if (System.IO.File.Exists(LOCAL_SCRIPT_PATH))
+            
+            Debug.Log($"GitHub version file: {githubVersionFile}");
+            
+            // Get local version file name
+            string localVersionFile = GetLocalVersionFile();
+            Debug.Log($"Local version file: {localVersionFile ?? "none"}");
+            
+            // Compare version files
+            bool hasUpdates = githubVersionFile != localVersionFile;
+            
+            if (hasUpdates)
             {
-                localCode = System.IO.File.ReadAllText(LOCAL_SCRIPT_PATH);
+                Debug.Log($"Version difference detected! GitHub: {githubVersionFile}, Local: {localVersionFile}");
             }
             else
             {
-                Debug.LogWarning($"Local script not found at: {LOCAL_SCRIPT_PATH}");
-                return true; // If local file doesn't exist, we definitely need an update
-            }
-
-            // Compare scripts (ignore whitespace differences)
-            string normalizedGithub = NormalizeCode(githubCode);
-            string normalizedLocal = NormalizeCode(localCode);
-
-            bool hasUpdates = normalizedGithub != normalizedLocal;
-            if (hasUpdates)
-            {
-                Debug.Log($"Code differences detected. GitHub length: {normalizedGithub.Length}, Local length: {normalizedLocal.Length}");
+                Debug.Log("Version files match - no updates needed");
             }
             
             return hasUpdates;
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"Error checking for code updates: {e.Message}");
+            Debug.LogError($"Error checking version files: {e.Message}");
             return false;
         }
     }
@@ -232,17 +226,81 @@ public class The_News : EditorWindow
         return null;
     }
 
-    private static string NormalizeCode(string code)
+    private static async System.Threading.Tasks.Task<string> GetGitHubVersionFile()
     {
-        if (string.IsNullOrEmpty(code))
-            return "";
+        try
+        {
+            using (var client = new HttpClient())
+            {
+                client.Timeout = TimeSpan.FromSeconds(3);
+                
+                string url = string.Format(API_TREE, REPO, BRANCH);
+                Debug.Log($"Getting GitHub tree from: {url}");
+                
+                var response = await client.GetStringAsync(url);
+                
+                // Parse JSON to find version files
+                var lines = response.Split('\n');
+                foreach (string line in lines)
+                {
+                    if (line.Contains($"\"{GITHUB_VERSION_FOLDER}/Version") && line.Contains("\"blob\""))
+                    {
+                        // Extract path from JSON
+                        int pathStart = line.IndexOf("\"path\":");
+                        if (pathStart != -1)
+                        {
+                            pathStart = line.IndexOf("\"", pathStart + 7) + 1;
+                            int pathEnd = line.IndexOf("\"", pathStart);
+                            string fullPath = line.Substring(pathStart, pathEnd - pathStart);
+                            
+                            // Extract just the filename
+                            string filename = System.IO.Path.GetFileName(fullPath);
+                            if (filename.StartsWith("Version"))
+                            {
+                                Debug.Log($"Found GitHub version file: {filename}");
+                                return filename;
+                            }
+                        }
+                    }
+                }
+                
+                Debug.LogWarning("No version file found on GitHub");
+                return null;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error getting GitHub version file: {e.Message}");
+            return null;
+        }
+    }
+
+    private static string GetLocalVersionFile()
+    {
+        try
+        {
+            if (!System.IO.Directory.Exists(LOCAL_VERSION_FOLDER))
+            {
+                Debug.Log($"Local version folder does not exist: {LOCAL_VERSION_FOLDER}");
+                return null;
+            }
             
-        // Remove comments, normalize whitespace for comparison
-        return code
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Replace("\t", "    ")
-            .Trim();
+            var files = System.IO.Directory.GetFiles(LOCAL_VERSION_FOLDER, "Version*");
+            if (files.Length > 0)
+            {
+                string filename = System.IO.Path.GetFileName(files[0]);
+                Debug.Log($"Found local version file: {filename}");
+                return filename;
+            }
+            
+            Debug.Log("No local version file found");
+            return null;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error getting local version file: {e.Message}");
+            return null;
+        }
     }
 
     private async void CheckForCodeUpdatesAsync()
