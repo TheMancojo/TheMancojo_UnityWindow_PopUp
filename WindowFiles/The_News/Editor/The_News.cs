@@ -1,3 +1,24 @@
+/*Mamma mia, here I go again
+My, my, how can I resist you?
+Mamma mia, does it show again?
+My, my, just how much I've missed you?
+Yes, I've been brokenhearted
+Blue since the day we parted
+Why, why did I ever let you go?
+Mamma mia, even if I say
+Bye-bye, leave me now or never
+Mamma mia, it's a game we play
+Bye-bye doesn't mean forever
+Mamma mia, here I go again
+My, my, how can I resist you?
+Mamma mia, does it show again
+My, my, just how much I've missed you?
+Yes, I've been brokenhearted
+Blue since the day we parted
+Why, why did I ever let you go?
+Mamma mia, now I really know
+My, my, I could never let you go*/
+
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
@@ -19,27 +40,6 @@ public class The_News : EditorWindow
     private const string LOCAL_SCRIPT_PATH = "Assets/TheMancojo/Scripts/The_News/Editor/The_News.cs";
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
-
-/*Mamma mia, here I go again
-My, my, how can I resist you?
-Mamma mia, does it show again?
-My, my, just how much I've missed you?
-Yes, I've been brokenhearted
-Blue since the day we parted
-Why, why did I ever let you go?
-Mamma mia, even if I say
-Bye-bye, leave me now or never
-Mamma mia, it's a game we play
-Bye-bye doesn't mean forever
-Mamma mia, here I go again
-My, my, how can I resist you?
-Mamma mia, does it show again
-My, my, just how much I've missed you?
-Yes, I've been brokenhearted
-Blue since the day we parted
-Why, why did I ever let you go?
-Mamma mia, now I really know
-My, my, I could never let you go*/
 
     private class Node
     {
@@ -124,7 +124,7 @@ My, my, I could never let you go*/
         {
             using (var client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(3); // Shorter timeout for better responsiveness
+                client.Timeout = TimeSpan.FromSeconds(5); // Quick timeout for auto-check
                 
                 // Use same headers as main window
                 var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
@@ -150,15 +150,11 @@ My, my, I could never let you go*/
                         return shaMatch.Groups[1].Value;
                     }
                 }
-                else
-                {
-                    Debug.LogWarning($"GitHub API returned {response.StatusCode}: {response.ReasonPhrase}");
-                }
             }
         }
-        catch (System.Exception e)
+        catch
         {
-            Debug.LogWarning($"Error getting latest commit SHA: {e.Message}");
+            // Ignore network errors for auto-check
         }
         return null;
     }
@@ -191,13 +187,15 @@ My, my, I could never let you go*/
                 return true; // If local file doesn't exist, we definitely need an update
             }
 
-            // Simple file size comparison in bits - much more reliable and precise
-            long githubBits = (long)githubCode.Length * 8; // Convert bytes to bits
-            long localBits = (long)localCode.Length * 8; // Convert bytes to bits
-            
-            bool hasUpdates = githubBits != localBits;
-            
-            Debug.Log($"File size comparison - GitHub: {githubBits} bits ({githubCode.Length} bytes), Local: {localBits} bits ({localCode.Length} bytes), Updates needed: {hasUpdates}");
+            // Compare scripts (ignore whitespace differences)
+            string normalizedGithub = NormalizeCode(githubCode);
+            string normalizedLocal = NormalizeCode(localCode);
+
+            bool hasUpdates = normalizedGithub != normalizedLocal;
+            if (hasUpdates)
+            {
+                Debug.Log($"Code differences detected. GitHub length: {normalizedGithub.Length}, Local length: {normalizedLocal.Length}");
+            }
             
             return hasUpdates;
         }
@@ -214,7 +212,7 @@ My, my, I could never let you go*/
         {
             using (var client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(5); // Short timeout
+                client.Timeout = TimeSpan.FromSeconds(10);
                 
                 var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
                 string token = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
@@ -227,24 +225,17 @@ My, my, I could never let you go*/
                 }
                 
                 string url = string.Format(RAW_BASE, REPO, BRANCH) + GITHUB_SCRIPT_PATH;
-                Debug.Log($"Downloading script from: {url}");
                 var response = await client.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    string content = await response.Content.ReadAsStringAsync();
-                    Debug.Log($"Successfully downloaded script, length: {content?.Length ?? 0}");
-                    return content;
-                }
-                else
-                {
-                    Debug.LogWarning($"Failed to download script: {response.StatusCode} - {response.ReasonPhrase}");
+                    return await response.Content.ReadAsStringAsync();
                 }
             }
         }
-        catch (System.Exception e)
+        catch
         {
-            Debug.LogWarning($"Error downloading GitHub script: {e.Message}");
+            // Ignore errors for code checking
         }
         return null;
     }
@@ -270,67 +261,49 @@ My, my, I could never let you go*/
         try
         {
             Debug.Log("Checking for code updates...");
-            
-            // Add timeout for the entire operation
-            var timeoutTask = System.Threading.Tasks.Task.Delay(10000); // 10 second timeout
-            var updateTask = PerformUpdateCheck();
-            
-            var completedTask = await System.Threading.Tasks.Task.WhenAny(updateTask, timeoutTask);
-            
-            if (completedTask == timeoutTask)
+            string currentCommit = await GetLatestCommitSHA();
+            if (!string.IsNullOrEmpty(currentCommit))
             {
-                Debug.LogWarning("Code update check timed out after 10 seconds");
-                return;
+                bool previousHasUpdates = hasCodeUpdates;
+                hasCodeUpdates = await CheckForCodeUpdates(currentCommit, lastKnownCommit);
+                
+                if (hasCodeUpdates && !previousHasUpdates)
+                {
+                    Debug.Log("Code updates available from GitHub - showing update button");
+                }
+                else if (!hasCodeUpdates && previousHasUpdates)
+                {
+                    Debug.Log("Code is up to date - hiding update button");
+                }
+                
+                // Always repaint to ensure UI updates
+                EditorApplication.delayCall += Repaint;
             }
-            
-            bool previousHasUpdates = hasCodeUpdates;
-            hasCodeUpdates = await updateTask;
-            
-            if (hasCodeUpdates && !previousHasUpdates)
+            else
             {
-                Debug.Log("Code updates available from GitHub - showing update button");
+                Debug.LogWarning("Could not get latest commit SHA for update check");
             }
-            else if (!hasCodeUpdates && previousHasUpdates)
-            {
-                Debug.Log("Code is up to date - hiding update button");
-            }
-            else if (!hasCodeUpdates)
-            {
-                Debug.Log("No code updates found");
-            }
-            
-            // Force UI update
-            EditorApplication.delayCall += () => {
-                if (this != null) Repaint();
-            };
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"Failed to check for code updates: {e.Message}\n{e.StackTrace}");
+            Debug.LogError($"Failed to check for code updates: {e.Message}");
         }
         finally
         {
             isCheckingForUpdates = false;
-        }
-    }
-    
-    private async System.Threading.Tasks.Task<bool> PerformUpdateCheck()
-    {
-        try
-        {
-            string currentCommit = await GetLatestCommitSHA();
-            if (string.IsNullOrEmpty(currentCommit))
-            {
-                Debug.LogWarning("Could not get latest commit SHA for update check");
-                return false;
-            }
             
-            return await CheckForCodeUpdates(currentCommit, lastKnownCommit);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error in PerformUpdateCheck: {e.Message}");
-            return false;
+            // Schedule next check in 30 seconds
+            EditorApplication.delayCall += () => {
+                if (this != null)
+                {
+                    EditorApplication.delayCall += () => {
+                        System.Threading.Tasks.Task.Delay(30000).ContinueWith(_ => {
+                            if (this != null)
+                                EditorApplication.delayCall += () => CheckForCodeUpdatesAsync();
+                        });
+                    };
+                }
+            };
         }
     }
 
@@ -1328,7 +1301,7 @@ My, my, I could never let you go*/
                     var post = new PostEntry
                     {
                         number = postNum,
-                    //    title = title,
+                        title = title,
                         imagePaths = new List<string>(kv.Value.imagePaths),
                         buttons = new List<ButtonEntry>(kv.Value.buttons)
                     };
