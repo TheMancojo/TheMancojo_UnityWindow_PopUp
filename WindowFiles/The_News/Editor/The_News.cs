@@ -1309,7 +1309,7 @@ public class The_News : EditorWindow
                     var post = new PostEntry
                     {
                         number = postNum,
-                        title = title,
+                    //    title = title,
                         imagePaths = new List<string>(kv.Value.imagePaths),
                         buttons = new List<ButtonEntry>(kv.Value.buttons)
                     };
