@@ -20,7 +20,6 @@ public class The_News : EditorWindow
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
-
     private class Node
     {
         public string name;
@@ -171,13 +170,15 @@ public class The_News : EditorWindow
                 return true; // If local file doesn't exist, we definitely need an update
             }
 
-            // Simple file size comparison in bits - much more reliable and precise
-            long githubBits = (long)githubCode.Length * 8; // Convert bytes to bits
-            long localBits = (long)localCode.Length * 8; // Convert bytes to bits
-            
-            bool hasUpdates = githubBits != localBits;
-            
-            Debug.Log($"File size comparison - GitHub: {githubBits} bits ({githubCode.Length} bytes), Local: {localBits} bits ({localCode.Length} bytes), Updates needed: {hasUpdates}");
+            // Compare scripts (ignore whitespace differences)
+            string normalizedGithub = NormalizeCode(githubCode);
+            string normalizedLocal = NormalizeCode(localCode);
+
+            bool hasUpdates = normalizedGithub != normalizedLocal;
+            if (hasUpdates)
+            {
+                Debug.Log($"Code differences detected. GitHub length: {normalizedGithub.Length}, Local length: {normalizedLocal.Length}");
+            }
             
             return hasUpdates;
         }
