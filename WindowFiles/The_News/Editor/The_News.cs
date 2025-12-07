@@ -18,6 +18,8 @@ public class The_News : EditorWindow
     private const string PREF_LAST_COMMIT_KEY = "The_News.LastCommit";
     private const string LOCAL_SCRIPT_PATH = "Assets/TheMancojo/Scripts/The_News/Editor/The_News.cs";
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
+    private const string LOCAL_VERSION_FOLDER = "Assets/TheMancojo/Scripts/The_News/Data";
+    private const string GITHUB_VERSION_FOLDER = "WindowFiles/The_News/Data";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
     private class Node
@@ -319,10 +321,21 @@ public class The_News : EditorWindow
     {
         try
         {
+            Debug.Log("Starting code update from GitHub...");
+            
+            // Download both script and version file
             string githubCode = await DownloadGitHubScript();
+            string githubVersionFile = await GetGitHubVersionFile();
+            
             if (string.IsNullOrEmpty(githubCode))
             {
                 EditorUtility.DisplayDialog("Update Failed", "Could not download code from GitHub.", "OK");
+                return;
+            }
+            
+            if (string.IsNullOrEmpty(githubVersionFile))
+            {
+                EditorUtility.DisplayDialog("Update Failed", "Could not find version file on GitHub.", "OK");
                 return;
             }
 
@@ -331,10 +344,36 @@ public class The_News : EditorWindow
             if (System.IO.File.Exists(LOCAL_SCRIPT_PATH))
             {
                 System.IO.File.Copy(LOCAL_SCRIPT_PATH, backupPath);
+                Debug.Log($"Backup created: {backupPath}");
             }
 
             // Write new code
             System.IO.File.WriteAllText(LOCAL_SCRIPT_PATH, githubCode);
+            Debug.Log("Updated script file");
+            
+            // Update version file
+            if (!System.IO.Directory.Exists(LOCAL_VERSION_FOLDER))
+            {
+                System.IO.Directory.CreateDirectory(LOCAL_VERSION_FOLDER);
+            }
+            
+            // Remove old version file
+            string localVersionFile = GetLocalVersionFile();
+            if (!string.IsNullOrEmpty(localVersionFile))
+            {
+                string oldVersionPath = System.IO.Path.Combine(LOCAL_VERSION_FOLDER, localVersionFile);
+                if (System.IO.File.Exists(oldVersionPath))
+                {
+                    System.IO.File.Delete(oldVersionPath);
+                    Debug.Log($"Removed old version file: {localVersionFile}");
+                }
+            }
+            
+            // Create new version file
+            string newVersionPath = System.IO.Path.Combine(LOCAL_VERSION_FOLDER, githubVersionFile);
+            System.IO.File.WriteAllText(newVersionPath, ""); // Empty file, name contains the version
+            Debug.Log($"Created new version file: {githubVersionFile}");
+            
             AssetDatabase.Refresh();
 
             hasCodeUpdates = false;
@@ -342,7 +381,7 @@ public class The_News : EditorWindow
 
             bool recompile = EditorUtility.DisplayDialog(
                 "Code Updated", 
-                $"The_News.cs has been updated from GitHub.\nBackup saved to: {backupPath}\n\nRecompile scripts now?", 
+                $"The_News.cs has been updated to {githubVersionFile}.\nBackup saved to: {backupPath}\n\nRecompile scripts now?", 
                 "Recompile", "Later");
 
             if (recompile)
@@ -354,6 +393,7 @@ public class The_News : EditorWindow
         catch (System.Exception e)
         {
             EditorUtility.DisplayDialog("Update Failed", $"Error updating code: {e.Message}", "OK");
+            Debug.LogError($"Update failed: {e.Message}\n{e.StackTrace}");
         }
     }
 
