@@ -170,15 +170,13 @@ public class The_News : EditorWindow
                 return true; // If local file doesn't exist, we definitely need an update
             }
 
-            // Compare scripts (ignore whitespace differences)
-            string normalizedGithub = NormalizeCode(githubCode);
-            string normalizedLocal = NormalizeCode(localCode);
-
-            bool hasUpdates = normalizedGithub != normalizedLocal;
-            if (hasUpdates)
-            {
-                Debug.Log($"Code differences detected. GitHub length: {normalizedGithub.Length}, Local length: {normalizedLocal.Length}");
-            }
+            // Simple file size comparison - much more reliable
+            int githubSize = githubCode.Length;
+            int localSize = localCode.Length;
+            
+            bool hasUpdates = githubSize != localSize;
+            
+            Debug.Log($"File size comparison - GitHub: {githubSize} bytes, Local: {localSize} bytes, Updates needed: {hasUpdates}");
             
             return hasUpdates;
         }
