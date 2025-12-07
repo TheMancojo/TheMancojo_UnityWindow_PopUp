@@ -17,10 +17,10 @@ public class The_News : EditorWindow
     private const string PREF_TOKEN_KEY = "The_News.GitHubToken";
     private const string PREF_LAST_COMMIT_KEY = "The_News.LastCommit";
     private const string LOCAL_SCRIPT_PATH = "Assets/TheMancojo/Scripts/The_News/Editor/The_News.cs";
-    private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News.cs";
+    private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
 
-//Hola Golfa
+//Hola Zorra
 
     private class Node
     {
@@ -355,6 +355,42 @@ public class The_News : EditorWindow
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.HelpBox("Add a token to increase the request limit to 5000/hour. Create a PAT (no scopes) and paste it here.", MessageType.Info);
             EditorGUILayout.EndVertical();
+        }
+
+        // If code updates are available, show only the update interface
+        if (hasCodeUpdates)
+        {
+            EditorGUILayout.Space(20);
+            EditorGUILayout.BeginVertical("box");
+            EditorGUILayout.LabelField("Code Update Available", EditorStyles.boldLabel);
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("A newer version of The_News is available on GitHub.", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.Space(10);
+            
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            
+            GUI.backgroundColor = Color.green;
+            if (GUILayout.Button("Update Now", GUILayout.Height(40), GUILayout.Width(120)))
+            {
+                UpdateCodeFromGitHub();
+            }
+            GUI.backgroundColor = Color.white;
+            
+            if (GUILayout.Button("Skip Update", GUILayout.Height(40), GUILayout.Width(120)))
+            {
+                hasCodeUpdates = false;
+                Repaint();
+            }
+            
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.Space(10);
+            EditorGUILayout.HelpBox("Your current code will be backed up before updating.", MessageType.Info);
+            EditorGUILayout.EndVertical();
+            
+            return; // Don't show the rest of the interface
         }
 
         // No breadcrumb display per request
