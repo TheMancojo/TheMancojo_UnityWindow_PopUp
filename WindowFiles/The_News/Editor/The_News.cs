@@ -680,6 +680,11 @@ public class The_News : EditorWindow
         foreach (System.Text.RegularExpressions.Match m in matches)
         {
             string path = m.Groups[1].Value;
+            
+            // Skip any paths that start with WindowFiles
+            if (path.StartsWith("WindowFiles/", StringComparison.OrdinalIgnoreCase))
+                continue;
+            
             string[] parts = path.Split('/');
             Node cur = root;
             for (int i = 0; i < parts.Length; i++)
@@ -729,21 +734,6 @@ public class The_News : EditorWindow
                     cur = next;
                 }
             }
-        }
-        
-        // Hide WindowFiles folder from navigation
-        if (root.children.ContainsKey("WindowFiles"))
-        {
-            var windowFiles = root.children["WindowFiles"];
-            // Move all children of WindowFiles to root level
-            foreach (var child in windowFiles.children)
-            {
-                child.Value.parent = root;
-                child.Value.path = child.Key;
-                root.children[child.Key] = child.Value;
-            }
-            // Remove WindowFiles folder
-            root.children.Remove("WindowFiles");
         }
         
         // Second pass: collect Post.N folders as posts and move their content to parent
