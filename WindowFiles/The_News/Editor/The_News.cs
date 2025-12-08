@@ -37,6 +37,7 @@ public class The_News : EditorWindow
     private const string RAW_BASE = "https://raw.githubusercontent.com/{0}/{1}/"; // + path
     private const string PREF_TOKEN_KEY = "The_News.GitHubToken";
     private const string PREF_LAST_COMMIT_KEY = "The_News.LastCommit";
+    private const string PREF_SKIP_UPDATES_KEY = "The_News.SkipUpdates";
     private const string LOCAL_SCRIPT_PATH = "Assets/TheMancojo/Scripts/The_News/Editor/The_News.cs";
     private const string GITHUB_SCRIPT_PATH = "WindowFiles/The_News/Editor/The_News.cs";
     private static readonly Color32 BACK_COLOR = new Color32(0x00, 0x00, 0x00, 0xFF);
@@ -82,6 +83,7 @@ public class The_News : EditorWindow
     private string lastKnownCommit;
     private bool isCheckingForUpdates;
     private bool hasCodeUpdates;
+    private bool skipUpdates;
 
     [InitializeOnLoadMethod]
     private static void OnProjectLoaded()
@@ -253,7 +255,7 @@ public class The_News : EditorWindow
             .Trim();
     }
 
-    private async void CheckForCodeUpdatesAsync()
+    private async void CheckForCodeUpdatesAsync(bool isManualCheck = false)
     {
         if (isCheckingForUpdates) return;
         isCheckingForUpdates = true;
@@ -274,6 +276,10 @@ public class The_News : EditorWindow
                 else if (!hasCodeUpdates && previousHasUpdates)
                 {
                     Debug.Log("Code is up to date - hiding update button");
+                }
+                else if (!hasCodeUpdates && (previousHasUpdates || isManualCheck))
+                {
+                    Debug.Log("No updates found - code is up to date");
                 }
                 
                 // Always repaint to ensure UI updates
@@ -330,6 +336,8 @@ public class The_News : EditorWindow
             AssetDatabase.Refresh();
 
             hasCodeUpdates = false;
+            skipUpdates = false;
+            EditorPrefs.SetBool(PREF_SKIP_UPDATES_KEY, false);
             Repaint();
 
             bool recompile = EditorUtility.DisplayDialog(
@@ -363,6 +371,7 @@ public class The_News : EditorWindow
         var env = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
         githubToken = EditorPrefs.GetString(PREF_TOKEN_KEY, string.IsNullOrEmpty(env) ? "" : env);
         lastKnownCommit = EditorPrefs.GetString(PREF_LAST_COMMIT_KEY, "");
+        skipUpdates = EditorPrefs.GetBool(PREF_SKIP_UPDATES_KEY, false);
         if (!isLoading && root.children.Count == 0) Refresh();
         
         // Check for code updates
@@ -386,7 +395,10 @@ public class The_News : EditorWindow
         
         if (GUILayout.Button("Check Updates", EditorStyles.toolbarButton, GUILayout.Width(100)))
         {
-            CheckForCodeUpdatesAsync();
+            // Reset skip flag when manually checking
+            skipUpdates = false;
+            EditorPrefs.SetBool(PREF_SKIP_UPDATES_KEY, false);
+            CheckForCodeUpdatesAsync(true);
         }
         
         GUILayout.FlexibleSpace();
@@ -417,7 +429,7 @@ public class The_News : EditorWindow
         }
 
         // If code updates are available, show only the update interface
-        if (hasCodeUpdates)
+        if (hasCodeUpdates && !skipUpdates)
         {
             EditorGUILayout.Space(20);
             EditorGUILayout.BeginVertical("box");
@@ -433,6 +445,18 @@ public class The_News : EditorWindow
             if (GUILayout.Button("Update Now", GUILayout.Height(40), GUILayout.Width(120)))
             {
                 UpdateCodeFromGitHub();
+            }
+            GUI.backgroundColor = Color.white;
+            
+            GUILayout.Space(10);
+            
+            GUI.backgroundColor = Color.red;
+            if (GUILayout.Button("Skip", GUILayout.Height(40), GUILayout.Width(80)))
+            {
+                skipUpdates = true;
+                EditorPrefs.SetBool(PREF_SKIP_UPDATES_KEY, true);
+                Debug.Log("Updates skipped. You can check for updates manually using the 'Check Updates' button.");
+                Repaint();
             }
             GUI.backgroundColor = Color.white;
             
